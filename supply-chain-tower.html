@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supply Chain AI Control Tower</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #080a08;
+    --surface:  #0d100d;
+    --s2:       #131713;
+    --s3:       #1a1f1a;
+    --border:   #1e241e;
+    --border2:  #2a342a;
+    --text:     #d4e4d4;
+    --muted:    #607060;
+    --faint:    #1a201a;
+    --amber:    #f0a500;
+    --amber2:   #ffc340;
+    --green:    #3ddc84;
+    --red:      #ff5c5c;
+    --blue:     #5bc8f5;
+    --yellow:   #f5d547;
+    --mono:     'JetBrains Mono', monospace;
+    --display:  'Barlow Condensed', sans-serif;
+    --body:     'Barlow', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* Hex grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+    background-size: 28px 28px;
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Ambient glow */
+  .glow-tl {
+    position: fixed; width: 600px; height: 400px;
+    top: -100px; left: -100px;
+    background: radial-gradient(ellipse, rgba(240,165,0,0.05) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+  .glow-br {
+    position: fixed; width: 500px; height: 400px;
+    bottom: -100px; right: -100px;
+    background: radial-gradient(ellipse, rgba(61,220,132,0.04) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .shell { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ── HEADER ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px;
+    height: 52px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,10,8,0.92);
+    backdrop-filter: blur(16px);
+    position: sticky; top: 0; z-index: 200;
+  }
+
+  .hd-left { display: flex; align-items: center; gap: 14px; }
+
+  .logo-box {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px;
+    border: 1px solid var(--amber);
+    background: rgba(240,165,0,0.08);
+    font-size: 16px;
+    box-shadow: 0 0 12px rgba(240,165,0,0.2), inset 0 0 8px rgba(240,165,0,0.05);
+    animation: pulseBox 3s ease-in-out infinite;
+  }
+  @keyframes pulseBox {
+    0%,100% { box-shadow: 0 0 12px rgba(240,165,0,0.2), inset 0 0 8px rgba(240,165,0,0.05); }
+    50%      { box-shadow: 0 0 20px rgba(240,165,0,0.35), inset 0 0 12px rgba(240,165,0,0.1); }
+  }
+
+  .logo-name {
+    font-family: var(--display);
+    font-size: 18px; font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--amber2);
+    text-transform: uppercase;
+  }
+  .logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
+
+  .hd-right { display: flex; align-items: center; gap: 10px; }
+  .badge {
+    font-family: var(--mono); font-size: 9px; font-weight: 600;
+    padding: 3px 9px; border-radius: 2px;
+    border: 1px solid; text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .badge-amber { color: var(--amber); border-color: rgba(240,165,0,0.35); background: rgba(240,165,0,0.06); }
+  .badge-green { color: var(--green); border-color: rgba(61,220,132,0.3); background: rgba(61,220,132,0.05); }
+  .live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  /* ── NAV ── */
+  nav {
+    display: flex; gap: 0;
+    background: rgba(8,10,8,0.85);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto; overflow-y: hidden;
+  }
+  nav::-webkit-scrollbar { display: none; }
+
+  .tab {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 22px;
+    height: 42px;
+    font-family: var(--display); font-size: 13px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--muted);
+    background: transparent; border: none;
+    border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--amber2); background: rgba(240,165,0,0.04); }
+  .tab.active { color: var(--amber2); border-bottom-color: var(--amber); background: rgba(240,165,0,0.05); }
+  .tab-num { font-size: 9px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── MAIN ── */
+  main { flex: 1; padding: 22px 28px; }
+
+  /* ── PANELS ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 18px;
+    position: relative;
+    transition: border-color .2s;
+  }
+  .panel::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--amber);
+    opacity: 0;
+    transition: opacity .2s;
+    border-radius: 3px 0 0 3px;
+  }
+  .panel:hover { border-color: var(--border2); }
+  .panel:hover::before { opacity: 0.4; }
+
+  .panel-hd {
+    font-family: var(--display);
+    font-size: 11px; font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+  }
+  .panel-hd-accent { color: var(--amber2); }
+
+  /* ── GRIDS ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+  .gap-stack { display: flex; flex-direction: column; gap: 14px; }
+
+  /* ── FORM ── */
+  textarea, input, select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    font-family: var(--mono); font-size: 11px;
+    padding: 9px 11px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+    resize: vertical;
+  }
+  textarea:focus, input:focus, select:focus {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 2px rgba(240,165,0,0.1);
+  }
+  textarea { line-height: 1.7; }
+
+  label {
+    display: flex; flex-direction: column; gap: 5px;
+    font-family: var(--display); font-size: 10px; font-weight: 700;
+    color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase;
+  }
+
+  /* ── BUTTONS ── */
+  .btn-primary {
+    background: var(--amber);
+    color: #000;
+    border: none; border-radius: 2px;
+    padding: 10px 20px;
+    font-family: var(--display); font-size: 13px; font-weight: 800;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s, box-shadow .15s;
+    box-shadow: 0 0 20px rgba(240,165,0,0.2);
+  }
+  .btn-primary:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); box-shadow: 0 0 28px rgba(240,165,0,0.35); }
+  .btn-primary:disabled { opacity: .3; cursor: not-allowed; }
+
+  .btn-ghost {
+    background: transparent; color: var(--amber);
+    border: 1px solid var(--border2); border-radius: 2px;
+    padding: 9px 16px;
+    font-family: var(--display); font-size: 12px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .btn-ghost:hover { background: rgba(240,165,0,0.06); border-color: rgba(240,165,0,0.4); }
+
+  .btn-sm { padding: 4px 12px; font-size: 10px; }
+
+  /* ── OUTPUT ── */
+  .output {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 14px;
+    font-family: var(--mono); font-size: 11px; line-height: 1.85;
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-y: auto;
+    max-height: 400px; min-height: 80px;
+  }
+  .output::-webkit-scrollbar { width: 4px; }
+  .output::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  .empty-state {
+    border: 1px dashed var(--border2);
+    border-radius: 2px;
+    padding: 36px 16px;
+    text-align: center;
+    color: var(--faint);
+    font-family: var(--mono); font-size: 11px; line-height: 2;
+  }
+
+  /* ── LOADER ── */
+  .loader { display: flex; align-items: center; gap: 10px; color: var(--amber); font-family: var(--mono); font-size: 11px; padding: 14px 0; }
+  .spinner {
+    width: 14px; height: 14px; flex-shrink: 0;
+    border: 2px solid var(--border2);
+    border-top-color: var(--amber);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── KPI CARD ── */
+  .kpi { text-align: center; padding: 20px 12px; }
+  .kpi-val { font-family: var(--mono); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .kpi-label { font-family: var(--display); font-size: 9px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 5px; }
+  .kpi-delta { font-family: var(--mono); font-size: 10px; margin-top: 6px; }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+  .neutral { color: var(--amber); }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; padding: 7px 10px;
+    font-family: var(--display); font-size: 9px; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--faint); font-family: var(--mono); font-size: 11px; color: var(--text); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background .1s; cursor: default; }
+  tbody tr:hover { background: var(--s2); }
+
+  /* ── PANES ── */
+  .pane { display: none; }
+  .pane.active { display: block; animation: fadeUp .18s ease; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
+
+  /* ── MISC ── */
+  .row { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+  .check-row { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 11px; color: var(--text); text-transform: none; letter-spacing: 0; }
+  input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--amber); cursor: pointer; }
+  .tag { padding: 2px 8px; border-radius: 2px; font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: 0.05em; }
+  .tag-amber  { color: var(--amber);  border: 1px solid rgba(240,165,0,0.3);  background: rgba(240,165,0,0.07); }
+  .tag-green  { color: var(--green);  border: 1px solid rgba(61,220,132,0.3); background: rgba(61,220,132,0.06); }
+  .tag-red    { color: var(--red);    border: 1px solid rgba(255,92,92,0.3);  background: rgba(255,92,92,0.07); }
+  .tag-blue   { color: var(--blue);   border: 1px solid rgba(91,200,245,0.3); background: rgba(91,200,245,0.06); }
+  .inline-select { width: auto !important; padding: 3px 8px !important; font-size: 10px !important; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .mb14 { margin-bottom: 14px; }
+  .sku-id { color: var(--amber2); font-weight: 700; }
+  .sub-text { color: var(--muted); font-size: 9px; margin-top: 2px; }
+
+  /* ── MINI SPARK ── */
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 24px; }
+  .spark-bar { width: 6px; background: var(--amber); opacity: 0.5; border-radius: 1px; transition: opacity .15s; }
+  .spark-bar:last-child { opacity: 1; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 10px 28px;
+    font-family: var(--mono); font-size: 9px;
+    color: var(--muted); text-align: center;
+    letter-spacing: 0.06em;
+  }
+
+  @media(max-width:768px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    header, nav > *, main, footer { padding-left: 14px; padding-right: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="glow-tl"></div>
+<div class="glow-br"></div>
+
+<div class="shell">
+
+<!-- ─── HEADER ─────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="hd-left">
+    <div class="logo-box">⬡</div>
+    <div>
+      <div class="logo-name">Supply Chain Tower</div>
+      <div class="logo-sub">Autonomous Planning · Inventory · Logistics · AI Copilot</div>
+    </div>
+  </div>
+  <div class="hd-right">
+    <div class="live-dot"></div>
+    <span class="badge badge-green">Live Feed</span>
+    <span class="badge badge-amber">AI-Native</span>
+    <span class="badge badge-amber">Rec Mode</span>
+  </div>
+</header>
+
+<!-- ─── NAV ──────────────────────────────────────────────────────────────── -->
+<nav id="tabNav">
+  <button class="tab active" data-pane="demand"><span class="tab-num">01</span> Demand Planning</button>
+  <button class="tab" data-pane="inventory"><span class="tab-num">02</span> Inventory Optimizer</button>
+  <button class="tab" data-pane="supplier"><span class="tab-num">03</span> Supplier Risk</button>
+  <button class="tab" data-pane="logistics"><span class="tab-num">04</span> Logistics Exceptions</button>
+  <button class="tab" data-pane="copilot"><span class="tab-num">05</span> Planner Copilot</button>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PANE 01 — DEMAND PLANNING
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="pane-demand" class="pane active">
+  <div class="grid-4 mb14">
+    <div class="panel kpi"><div class="kpi-val up">91.4%</div><div class="kpi-label">Forecast Accuracy</div><div class="kpi-delta up">▲ +4.2pp</div></div>
+    <div class="panel kpi"><div class="kpi-val neutral">+3.1%</div><div class="kpi-label">Forecast Bias</div><div class="kpi-delta neutral">→ Slight over</div></div>
+    <div class="panel kpi"><div class="kpi-val up">18d</div><div class="kpi-label">Cycle Time</div><div class="kpi-delta up">▼ −6d vs baseline</div></div>
+    <div class="panel kpi"><div class="kpi-val down">142</div><div class="kpi-label">SKUs at Risk</div><div class="kpi-delta down">▲ +23 this week</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-hd"><span>📈 <span class="panel-hd-accent">Demand Signal Input</span></span>
+        <select class="inline-select" id="demandCat">
+          <option>FMCG / Beverages</option><option>Electronics</option><option>Apparel</option>
+          <option>Pharma</option><option>Industrial</option><option>Grocery</option>
+        </select>
+      </div>
+      <div class="gap-stack">
+        <label>SKU / Product Family
+          <input id="demandSku" placeholder="e.g., SKU-4821 — Sparkling Water 500ml 24pk" />
+        </label>
+        <label>Horizon & Granularity
+          <input id="demandHorizon" placeholder="e.g., 12-week weekly forecast, regional DC level" />
+        </label>
+        <label>Causal Drivers to Consider
+          <textarea id="demandDrivers" rows="3" placeholder="e.g., summer promotion +15%, competitor OOS, new store openings in South region, heatwave forecast week 6–8…"></textarea>
+        </label>
+        <label>Current Forecast vs Actuals
+          <textarea id="demandActuals" rows="2" placeholder="e.g., Last 4 weeks: forecast 12k, 13k, 11k, 14k — actuals 11k, 14k, 10k, 16k"></textarea>
+        </label>
+      </div>
+      <div class="row">
+        <button class="btn-ghost" onclick="loadSample('demand')">Load Sample</button>
+        <button class="btn-primary" id="demandBtn" onclick="runDemand()">▶ Run Forecast Analysis</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-hd">🤖 <span class="panel-hd-accent">AI Forecast Intelligence</span></div>
+      <div id="demandOutput" class="empty-state">Hierarchical forecast analysis, causal driver decomposition,<br>bias diagnosis, and recommended adjustments will appear here</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PANE 02 — INVENTORY OPTIMIZER
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="pane-inventory" class="pane">
+  <div class="grid-4 mb14">
+    <div class="panel kpi"><div class="kpi-val up">4.8x</div><div class="kpi-label">Inventory Turns</div><div class="kpi-delta up">▲ +0.6x</div></div>
+    <div class="panel kpi"><div class="kpi-val down">$14.2M</div><div class="kpi-label">Excess Stock Value</div><div class="kpi-delta down">▲ +$1.1M</div></div>
+    <div class="panel kpi"><div class="kpi-val down">38</div><div class="kpi-label">Stockout Alerts</div><div class="kpi-delta down">Critical: 9</div></div>
+    <div class="panel kpi"><div class="kpi-val neutral">97.1%</div><div class="kpi-label">Service Level</div><div class="kpi-delta neutral">Target: 98.5%</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-hd">📦 <span class="panel-hd-accent">Inventory Parameters</span></div>
+      <div class="gap-stack">
+        <label>SKU / Category
+          <input id="invSku" placeholder="e.g., SKU-0341 — Protein Bar Variety 12pk" />
+        </label>
+        <div class="grid-2">
+          <label>Current Stock (units)
+            <input id="invStock" placeholder="e.g., 48,200" />
+          </label>
+          <label>Safety Stock Target
+            <input id="invSafety" placeholder="e.g., 12,000 units" />
+          </label>
+        </div>
+        <div class="grid-2">
+          <label>Lead Time (days)
+            <input id="invLead" placeholder="e.g., 21 days" />
+          </label>
+          <label>Service Level Target
+            <input id="invSl" placeholder="e.g., 98.5%" />
+          </label>
+        </div>
+        <label>Demand Variability & Constraints
+          <textarea id="invContext" rows="3" placeholder="e.g., Avg daily demand 1,800 units, std dev 420. MOQ 6,000. Shelf life 180 days. 3 DC locations. Slow-moving flag: 12% of SKUs >60 DIO…"></textarea>
+        </label>
+      </div>
+      <div class="row">
+        <button class="btn-ghost" onclick="loadSample('inventory')">Load Sample</button>
+        <button class="btn-primary" id="invBtn" onclick="runInventory()">▶ Optimize Inventory</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-hd">⚙️ <span class="panel-hd-accent">Optimization Recommendations</span></div>
+      <div id="invOutput" class="empty-state">Safety-stock levels, reorder points, slow-mover alerts,<br>multi-echelon recommendations will appear here</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PANE 03 — SUPPLIER RISK
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="pane-supplier" class="pane">
+  <div class="grid-4 mb14">
+    <div class="panel kpi"><div class="kpi-val down">7</div><div class="kpi-label">High-Risk Suppliers</div><div class="kpi-delta down">▲ +3 this month</div></div>
+    <div class="panel kpi"><div class="kpi-val neutral">84.2%</div><div class="kpi-label">OTIF Score</div><div class="kpi-delta neutral">Target: 92%</div></div>
+    <div class="panel kpi"><div class="kpi-val down">3</div><div class="kpi-label">Critical Alerts</div><div class="kpi-delta down">Geopolitical</div></div>
+    <div class="panel kpi"><div class="kpi-val up">91%</div><div class="kpi-label">Quality Pass Rate</div><div class="kpi-delta up">▲ +2.1pp</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-hd">🏭 <span class="panel-hd-accent">Supplier Intelligence</span></div>
+      <div class="gap-stack">
+        <label>Supplier Name / Region
+          <input id="suppName" placeholder="e.g., Apex Packaging Ltd — South Asia / India" />
+        </label>
+        <label>Category & Spend
+          <input id="suppCat" placeholder="e.g., Flexible Packaging — $4.2M annual spend" />
+        </label>
+        <label>Recent Performance
+          <textarea id="suppPerf" rows="3" placeholder="e.g., OTIF: 78% last quarter (target 92%). 2 quality rejections. Lead time slipping from 28 to 38 days. Single-source dependency for 3 SKUs…"></textarea>
+        </label>
+        <label>External Risk Signals
+          <textarea id="suppRisk" rows="2" placeholder="e.g., Port congestion Chennai, currency devaluation, new compliance reg Q3, supplier financial stress signals…"></textarea>
+        </label>
+      </div>
+      <div class="row">
+        <button class="btn-ghost" onclick="loadSample('supplier')">Load Sample</button>
+        <button class="btn-primary" id="suppBtn" onclick="runSupplier()">▶ Score Supplier Risk</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-hd">⚡ <span class="panel-hd-accent">Risk Assessment & Actions</span></div>
+      <div id="suppOutput" class="empty-state">Risk score, root causes, supply continuity actions,<br>dual-source recommendations will appear here</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PANE 04 — LOGISTICS EXCEPTIONS
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="pane-logistics" class="pane">
+
+  <div class="grid-4 mb14">
+    <div class="panel kpi"><div class="kpi-val down">23</div><div class="kpi-label">Active Exceptions</div><div class="kpi-delta down">12 critical</div></div>
+    <div class="panel kpi"><div class="kpi-val neutral">94.1%</div><div class="kpi-label">On-Time Delivery</div><div class="kpi-delta neutral">Target: 97%</div></div>
+    <div class="panel kpi"><div class="kpi-val down">+$218K</div><div class="kpi-label">Expedite Spend MTD</div><div class="kpi-delta down">▲ +34%</div></div>
+    <div class="panel kpi"><div class="kpi-val neutral">4.2d</div><div class="kpi-label">Avg Delay</div><div class="kpi-delta neutral">→ Flat vs LM</div></div>
+  </div>
+
+  <!-- Exception queue -->
+  <div class="panel mb14">
+    <div class="panel-hd">🚚 <span class="panel-hd-accent">Live Exception Queue</span> <span class="tag tag-amber">23 Open</span></div>
+    <table>
+      <thead><tr>
+        <th>Shipment</th><th>Origin → Dest</th><th>Carrier</th><th>ETA Delay</th><th>Severity</th><th>Root Cause</th><th>AI Action</th>
+      </tr></thead>
+      <tbody id="exceptionQueue"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-hd">🤖 <span class="panel-hd-accent">Exception Resolution</span></div>
+    <div id="logOutput" class="empty-state">Click "Triage" on any shipment exception<br>to get AI-powered resolution and escalation plan</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PANE 05 — PLANNER COPILOT
+═══════════════════════════════════════════════════════════════════════════ -->
+<div id="pane-copilot" class="pane">
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-hd">🧠 <span class="panel-hd-accent">Scenario Simulation</span></div>
+      <div class="gap-stack">
+        <label>Planning Question or Scenario
+          <textarea id="copilotQ" rows="5" placeholder="e.g., What happens to our West Coast inventory if the Shanghai port strike extends 3 more weeks? Model impact on top 20 SKUs and recommend rebalancing actions…"></textarea>
+        </label>
+        <label>Current State Context
+          <textarea id="copilotCtx" rows="4" placeholder="e.g., 18 days of cover at LA DC. Safety stock 12k units. 2 POs in transit, ETA delayed 8 days. Alternate supplier lead time 35 days. Promotion starts Week 8…"></textarea>
+        </label>
+        <div class="check-row"><input type="checkbox" id="writeBack"> Recommendation mode only (no ERP write-back)</div>
+      </div>
+      <div class="row">
+        <button class="btn-ghost" onclick="loadSample('copilot')">Load Scenario</button>
+        <button class="btn-primary" id="copilotBtn" onclick="runCopilot()">▶ Simulate Scenario</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-hd">📊 <span class="panel-hd-accent">Scenario Output + Recommended Actions</span>
+        <span class="tag tag-amber">Approval Required</span>
+      </div>
+      <div id="copilotOutput" class="empty-state">Scenario impact model, inventory coverage waterfall,<br>ranked action list, and S&OP recommendation will appear here</div>
+    </div>
+  </div>
+
+  <!-- Quick-fire copilot chat -->
+  <div class="panel" style="margin-top:18px">
+    <div class="panel-hd">💬 <span class="panel-hd-accent">Quick Planner Questions</span></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px" id="quickBtns">
+      <button class="btn-ghost btn-sm" onclick="quickAsk('Which 10 SKUs have the highest stockout risk in the next 4 weeks?')">Top Stockout Risks</button>
+      <button class="btn-ghost btn-sm" onclick="quickAsk('Summarize the top 5 supply chain risks this week and recommended mitigations')">Weekly Risk Digest</button>
+      <button class="btn-ghost btn-sm" onclick="quickAsk('Which suppliers should we dual-source based on current risk scores and spend exposure?')">Dual-Source Candidates</button>
+      <button class="btn-ghost btn-sm" onclick="quickAsk('Identify the 10 SKUs with highest excess inventory value and recommend disposition actions')">Excess Inventory</button>
+      <button class="btn-ghost btn-sm" onclick="quickAsk('What would be the working capital impact of reducing safety stock by 10% across all DCs?')">Safety Stock Sensitivity</button>
+    </div>
+    <div id="quickOutput" class="empty-state">Click a quick question above to get an instant AI response</div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  RECOMMENDATION MODE ACTIVE — No automatic ERP write-back &nbsp;|&nbsp; All outputs require planner approval before execution &nbsp;|&nbsp; Prepared for Santanu Sarker
+</footer>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════════════════════════════ -->
+<script>
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.getElementById('tabNav').addEventListener('click', e => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pane-' + btn.dataset.pane).classList.add('active');
+});
+
+// ── Sample data ───────────────────────────────────────────────────────────────
+const SAMPLES = {
+  demand: {
+    sku:      'SKU-4821 — Sparkling Water 500ml 24pk (West & South DCs)',
+    horizon:  '12-week weekly forecast, DC-level granularity',
+    drivers:  'Summer heatwave forecast weeks 6–8 (+18% lift historically), competitor OOS on key rival SKU (est. +8% uplift), new retail chain expansion adding 420 stores in South region week 5, national TV promotion week 4 (+12%), fuel cost spike may dampen promotional uplift',
+    actuals:  'Last 4 weeks: forecast 12,200 / 13,100 / 11,800 / 14,200 — actuals 10,900 / 14,600 / 10,200 / 16,100. Consistent under-forecast on promo weeks, over-forecast on non-promo.',
+  },
+  inventory: {
+    sku:     'SKU-0341 — Protein Bar Variety 12pk (3 DC network)',
+    stock:   '48,200 units across DCs (LA: 22k, Chicago: 16k, Dallas: 10k)',
+    safety:  '12,000 units total (4k per DC)',
+    lead:    '21 days from primary supplier, 35 days from backup',
+    sl:      '98.5%',
+    context: 'Avg daily demand 1,800 units, std dev 420. MOQ 6,000. Shelf life 180 days. DIO target 28d. LA DC has 12.2 days cover — below safety. Chicago has 8.9d cover — critical. Dallas has 5.6d cover — stockout risk in 6d. 14 slow-moving SKUs in warehouse with >90 DIO. New promo starts week 3.',
+  },
+  supplier: {
+    name: 'Apex Packaging Ltd — Pune, India (South Asia)',
+    cat:  'Flexible Packaging (pouches, shrink wraps) — $4.2M annual spend',
+    perf: 'OTIF: 78% last quarter vs 92% target. 2 quality rejection events (Aug, Oct). Lead time creep: contracted 28d, actual avg 38d last 8 weeks. Single-source dependency for 3 high-velocity SKUs. No confirmed capacity for Q4 volume ramp.',
+    risk: 'Chennai port congestion ongoing (3–5d delays). INR depreciation 6% YTD increasing cost. New Bureau of Indian Standards regulation effective Q3 requires re-certification. Apex CFO departure and delayed financial filing — credit watch signals.',
+  },
+  copilot: {
+    q:   'Model the impact of a 3-week extension of the Shanghai port labor strike on our West Coast DC inventory. Which SKUs hit stockout first? What rebalancing and sourcing actions should we take now vs in Week 2?',
+    ctx: 'West Coast DC: 18 days average cover, 12k safety stock. 4 POs currently in transit via Shanghai, combined value $2.1M, ETA originally next week now delayed 8–12 days. Alternate sourcing from Vietnam supplier: 35-day lead time, 80% of volume capacity. East Coast DC has 34 days cover on overlapping SKUs. Summer promotion starts Week 8 adding ~22% volume lift. Expedite air freight cost: $8.20/kg vs standard $1.40/kg.',
+  },
+};
+
+function loadSample(type) {
+  if (type === 'demand') {
+    document.getElementById('demandSku').value     = SAMPLES.demand.sku;
+    document.getElementById('demandHorizon').value = SAMPLES.demand.horizon;
+    document.getElementById('demandDrivers').value = SAMPLES.demand.drivers;
+    document.getElementById('demandActuals').value = SAMPLES.demand.actuals;
+  } else if (type === 'inventory') {
+    document.getElementById('invSku').value     = SAMPLES.inventory.sku;
+    document.getElementById('invStock').value   = SAMPLES.inventory.stock;
+    document.getElementById('invSafety').value  = SAMPLES.inventory.safety;
+    document.getElementById('invLead').value    = SAMPLES.inventory.lead;
+    document.getElementById('invSl').value      = SAMPLES.inventory.sl;
+    document.getElementById('invContext').value = SAMPLES.inventory.context;
+  } else if (type === 'supplier') {
+    document.getElementById('suppName').value = SAMPLES.supplier.name;
+    document.getElementById('suppCat').value  = SAMPLES.supplier.cat;
+    document.getElementById('suppPerf').value = SAMPLES.supplier.perf;
+    document.getElementById('suppRisk').value = SAMPLES.supplier.risk;
+  } else if (type === 'copilot') {
+    document.getElementById('copilotQ').value   = SAMPLES.copilot.q;
+    document.getElementById('copilotCtx').value = SAMPLES.copilot.ctx;
+  }
+}
+
+// ── Streaming Claude ──────────────────────────────────────────────────────────
+async function streamClaude(system, userMsg, outputEl, btnEl) {
+  if (btnEl) btnEl.disabled = true;
+  outputEl.className = '';
+  outputEl.innerHTML = '<div class="loader"><div class="spinner"></div><span>Processing…</span></div>';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        stream: true,
+        system,
+        messages: [{ role: 'user', content: userMsg }],
+      }),
+    });
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let full = '';
+    outputEl.className = 'output';
+    outputEl.textContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const d = JSON.parse(line.slice(6));
+          if (d.type === 'content_block_delta' && d.delta?.text) {
+            full += d.delta.text;
+            outputEl.textContent = full;
+            outputEl.scrollTop = outputEl.scrollHeight;
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    outputEl.className = 'output';
+    outputEl.textContent = '⚠ Error: ' + err.message;
+  } finally {
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
+// ── 01 DEMAND ─────────────────────────────────────────────────────────────────
+function runDemand() {
+  const cat = document.getElementById('demandCat').value;
+  const msg = `Category: ${cat}
+SKU/Family: ${document.getElementById('demandSku').value || 'Not specified'}
+Horizon: ${document.getElementById('demandHorizon').value || 'Not specified'}
+Causal Drivers: ${document.getElementById('demandDrivers').value || 'None'}
+Forecast vs Actuals: ${document.getElementById('demandActuals').value || 'None'}`;
+
+  streamClaude(
+    `You are a senior demand planning data scientist specializing in hierarchical forecasting and causal modeling for ${cat}.
+Analyze the demand signal and provide:
+
+1. FORECAST DIAGNOSIS — bias analysis, MAPE assessment, pattern identification
+2. CAUSAL DRIVER DECOMPOSITION — quantify impact of each driver (baseline, promotion, weather, competitive, etc.)
+3. ADJUSTED FORECAST — recommend Week 1–12 direction and magnitude adjustments with rationale
+4. RISK SCENARIOS — upside (P10) and downside (P90) scenarios with trigger conditions
+5. STATISTICAL FLAGS — outlier weeks, seasonality breaks, demand sensing signals
+6. RECOMMENDED ACTIONS — specific planner actions ranked by urgency and impact
+7. KPI TARGETS — revised forecast accuracy and bias targets
+
+Use ▸ section headers. Quantify wherever possible. Flag urgent items with ⚡.`,
+    msg,
+    document.getElementById('demandOutput'),
+    document.getElementById('demandBtn')
+  );
+}
+
+// ── 02 INVENTORY ──────────────────────────────────────────────────────────────
+function runInventory() {
+  const msg = `SKU: ${document.getElementById('invSku').value || 'Not specified'}
+Current Stock: ${document.getElementById('invStock').value || 'Not specified'}
+Safety Stock Target: ${document.getElementById('invSafety').value || 'Not specified'}
+Lead Time: ${document.getElementById('invLead').value || 'Not specified'}
+Service Level Target: ${document.getElementById('invSl').value || 'Not specified'}
+Context: ${document.getElementById('invContext').value || 'None'}`;
+
+  streamClaude(
+    `You are an expert supply chain operations researcher specializing in multi-echelon inventory optimization using OR-Tools and statistical methods.
+Analyze the inventory parameters and provide:
+
+1. INVENTORY HEALTH SCORE — overall assessment (0–100) with component breakdown
+2. SAFETY STOCK RECOMMENDATION — optimal safety stock per DC using demand variability and lead time
+3. REORDER POINT CALCULATION — show formula and computed ROP values
+4. STOCKOUT RISK RANKING — which DC/SKU combinations are at highest risk and ETA to stockout
+5. EXCESS INVENTORY FLAGS — identify slow movers, excess by location, disposition options
+6. REBALANCING PLAN — inter-DC transfer recommendations with quantities and priority
+7. WORKING CAPITAL IMPACT — $ value of recommended vs current inventory levels
+8. SYSTEM ACTIONS RECOMMENDED — specific ERP/WMS parameter changes (recommendation mode)
+
+Use ▸ headers. Use tables where helpful. Quantify $ and unit impacts. Flag critical items with 🔴.`,
+    msg,
+    document.getElementById('invOutput'),
+    document.getElementById('invBtn')
+  );
+}
+
+// ── 03 SUPPLIER ───────────────────────────────────────────────────────────────
+function runSupplier() {
+  const msg = `Supplier: ${document.getElementById('suppName').value || 'Not specified'}
+Category & Spend: ${document.getElementById('suppCat').value || 'Not specified'}
+Recent Performance: ${document.getElementById('suppPerf').value || 'None'}
+External Risk Signals: ${document.getElementById('suppRisk').value || 'None'}`;
+
+  streamClaude(
+    `You are a strategic sourcing and supplier risk expert with deep knowledge of global supply chains, geopolitical risk, and supplier financial health.
+Assess the supplier risk and provide:
+
+1. COMPOSITE RISK SCORE — 0–100 scale with risk tier (Critical/High/Medium/Low)
+2. RISK DIMENSION BREAKDOWN — performance, financial, geopolitical, regulatory, concentration, quality
+3. SUPPLY CONTINUITY THREAT — probability and timeline of disruption scenario
+4. IMMEDIATE ACTIONS — specific steps to take in next 30 days
+5. STRATEGIC RECOMMENDATIONS — dual-source strategy, contract renegotiation, qualification plan
+6. DUAL-SOURCE CANDIDATES — suggested alternate supplier profiles and qualification timeline
+7. ESCALATION TRIGGER — conditions that would require executive escalation
+8. COMMERCIAL LEVERS — contract clauses, buffer stock, pricing hedges to activate
+
+Use ▸ headers. Use 🔴/🟡/🟢 risk indicators. Be specific and commercially oriented.`,
+    msg,
+    document.getElementById('suppOutput'),
+    document.getElementById('suppBtn')
+  );
+}
+
+// ── 04 LOGISTICS EXCEPTIONS ───────────────────────────────────────────────────
+const EXCEPTIONS = [
+  { id:'SHP-8821', route:'Shanghai → LA',    carrier:'COSCO',    delay:'+9d',  sev:'Critical', cause:'Port labor strike'   },
+  { id:'SHP-8814', route:'Mumbai → London',  carrier:'Maersk',   delay:'+5d',  sev:'High',     cause:'Vessel rerouting'    },
+  { id:'SHP-8809', route:'Dallas → Chicago', carrier:'FedEx',    delay:'+2d',  sev:'Medium',   cause:'Weather delay'       },
+  { id:'SHP-8801', route:'Rotterdam → NY',   carrier:'MSC',      delay:'+7d',  sev:'High',     cause:'Customs hold'        },
+  { id:'SHP-8796', route:'Tokyo → Seattle',  carrier:'Hapag',    delay:'+4d',  sev:'Medium',   cause:'Equipment shortage'  },
+];
+
+(function buildQueue() {
+  const tbody = document.getElementById('exceptionQueue');
+  EXCEPTIONS.forEach((e, i) => {
+    const sevClass = e.sev === 'Critical' ? 'tag-red' : e.sev === 'High' ? 'tag-amber' : 'tag-blue';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="sku-id">${e.id}</span></td>
+      <td>${e.route}</td>
+      <td>${e.carrier}</td>
+      <td style="color:var(--red);font-weight:700">${e.delay}</td>
+      <td><span class="tag ${sevClass}">${e.sev}</span></td>
+      <td>${e.cause}</td>
+      <td><button class="btn-ghost btn-sm" onclick="triageException(${i})">Triage</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+})();
+
+function triageException(idx) {
+  const e = EXCEPTIONS[idx];
+  const out = document.getElementById('logOutput');
+  out.className = '';
+  out.innerHTML = `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+    <span class="sku-id">${e.id}</span> &nbsp;·&nbsp; ${e.route} &nbsp;·&nbsp; ${e.carrier} &nbsp;·&nbsp; Delay: <span style="color:var(--red)">${e.delay}</span>
+  </div>
+  <div id="logStream" class="output" style="min-height:60px"></div>`;
+
+  streamClaude(
+    `You are a logistics operations expert specializing in international freight, exception management, and expedite optimization.
+Analyze this shipment exception and provide:
+
+1. IMPACT ASSESSMENT — downstream inventory impact, stockout risk, revenue at risk
+2. ROOT CAUSE ANALYSIS — detailed breakdown of the disruption cause
+3. RESOLUTION OPTIONS — ranked by speed/cost/feasibility (e.g., air freight, alternative port, partial release, DC rebalancing)
+4. RECOMMENDED ACTION — single best action with cost/benefit
+5. CUSTOMER IMPACT — at-risk orders, OTIF impact, customer communication needed
+6. EXPEDITE ECONOMICS — cost of expediting vs cost of delay (stockout, lost sales, penalties)
+7. ESCALATION PROTOCOL — who to notify and when
+8. PREVENTION SIGNAL — early warning flag for similar future shipments
+
+Quantify costs and timeline. Be immediately actionable.`,
+    `Shipment: ${e.id}
+Route: ${e.route}
+Carrier: ${e.carrier}
+Delay: ${e.delay}
+Severity: ${e.sev}
+Root Cause: ${e.cause}`,
+    document.getElementById('logStream'),
+    null
+  );
+}
+
+// ── 05 PLANNER COPILOT ────────────────────────────────────────────────────────
+function runCopilot() {
+  const writeBack = document.getElementById('writeBack').checked;
+  streamClaude(
+    `You are an expert supply chain planning copilot with deep expertise in S&OP, inventory theory, demand planning, and logistics optimization.
+You operate in RECOMMENDATION MODE — no automatic ERP write-back. All outputs require planner approval.
+
+Provide a complete scenario analysis including:
+
+1. SCENARIO SUMMARY — concise situation brief
+2. INVENTORY IMPACT MODEL — coverage waterfall by week, stockout probability by SKU/DC
+3. FINANCIAL IMPACT — working capital, expedite cost, lost sales at risk (quantified)
+4. RANKED ACTION PLAN — specific actions with owner, timeline, and expected impact
+5. DECISION FRAMEWORK — what to decide now vs monitor vs escalate
+6. ERP PARAMETER RECOMMENDATIONS — suggested changes (${writeBack ? 'FLAG for write-back approval' : 'recommendation mode, no write-back'})
+7. S&OP NARRATIVE — 3-paragraph executive brief for the planning meeting
+8. SENSITIVITY — what changes if assumptions are 20% worse or better
+
+Use ▸ headers. Quantify all impacts. Format the action plan as a prioritized table.`,
+    `Question: ${document.getElementById('copilotQ').value || 'General scenario review'}
+Current State Context: ${document.getElementById('copilotCtx').value || 'None provided'}`,
+    document.getElementById('copilotOutput'),
+    document.getElementById('copilotBtn')
+  );
+}
+
+function quickAsk(question) {
+  const out = document.getElementById('quickOutput');
+  streamClaude(
+    `You are a concise supply chain AI copilot. Answer the planner's question with specific, data-driven recommendations.
+Use bullet points and short paragraphs. Quantify wherever possible. Be immediately useful and actionable.
+Flag the top 3 urgent actions with ⚡.`,
+    question,
+    out,
+    null
+  );
+}
+
+</script>
+</body>
+</html>
